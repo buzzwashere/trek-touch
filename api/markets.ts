@@ -1,3 +1,8 @@
+/// <reference types="node" />
+// The reference above is for Vercel, which type-checks this file against the root
+// tsconfig.json (a references-only file with no Node types), so `process` would be
+// unknown there. Locally tsconfig.node.json already includes them.
+
 // GET /api/markets on Vercel. Set FINNHUB_API_KEY in the project's environment
 // variables; without it only Treasury yields are returned.
 //

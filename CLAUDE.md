@@ -32,6 +32,9 @@ shapes, so everything is plain scoped CSS over the tokens in `src/assets/main.cs
   package is `"type": "module"`, so Vercel runs the compiled functions as native ESM,
   which fails on extensionless imports with `ERR_MODULE_NOT_FOUND`. Vite and `vue-tsc`
   don't catch this.
+- Vercel type-checks `api/` against the root `tsconfig.json`, which has no Node types, so
+  a function that uses Node globals such as `process` needs
+  `/// <reference types="node" />` at the top (see `api/markets.ts`).
 - `vite.config.ts` has a dev-only middleware serving `/api/markets` from the same core via
   `ssrLoadModule`, with the key from `loadEnv`.
 - `FINNHUB_API_KEY` lives in `.env.local` (git-ignored) or Vercel env vars, never
