@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import LcarsRibbon from '../components/LcarsRibbon.vue'
+import MarketsPanel from '../components/MarketsPanel.vue'
 import { DEPARTMENTS, RIBBONS } from '../data/ribbons'
 import type { Department } from '../data/ribbons'
 import { useLcarsAudio } from '../composables/useLcarsAudio'
@@ -9,7 +10,10 @@ import { useStardate } from '../composables/useStardate'
 const audio = useLcarsAudio()
 const stardate = useStardate()
 
-const filter = ref<Department | 'all'>('all')
+// What the content column shows: every ribbon, one department's, or the Markets panel.
+type View = Department | 'all' | 'markets'
+
+const filter = ref<View>('all')
 const expanded = ref<Record<string, boolean>>({})
 const acknowledged = ref<Record<string, boolean>>({})
 const redAlert = ref(false)
@@ -20,9 +24,15 @@ const visibleRibbons = computed(() =>
   filter.value === 'all' ? RIBBONS : RIBBONS.filter(r => r.department === filter.value),
 )
 
-const filterLabel = computed(() =>
-  filter.value === 'all' ? 'All Departments' : DEPARTMENTS.find(d => d.id === filter.value)!.label,
-)
+const filterLabel = computed(() => {
+  if (filter.value === 'all') {
+    return 'All Departments'
+  }
+  if (filter.value === 'markets') {
+    return 'Markets'
+  }
+  return DEPARTMENTS.find(d => d.id === filter.value)!.label
+})
 
 const ackCount = computed(() => RIBBONS.filter(r => acknowledged.value[r.id]).length)
 
@@ -43,7 +53,65 @@ onMounted(() => {
 
 onBeforeUnmount(() => clearInterval(timer))
 
-function selectFilter(id: Department | 'all') {
+// --- rail overflow cue ----------------------------------------------------------
+// When the rail is taller than its slot, an arrow pill sits over the end that has more
+// buttons beyond it, and that end fades out. Each pill scrolls by one button.
+const railRef = ref<HTMLElement | null>(null)
+const canScrollUp = ref(false)
+const canScrollDown = ref(false)
+const hiddenAbove = ref(0)
+const hiddenBelow = ref(0)
+// Height of an arrow pill plus the rail gap; a button under the pill counts as hidden.
+const ARROW_COVER = 42
+// Slack so sub-pixel scroll positions don't leave an arrow flickering at the ends.
+const EDGE_SLACK = 2
+
+function updateRailOverflow() {
+  const rail = railRef.value
+  if (!rail) {
+    return
+  }
+  const top = rail.scrollTop
+  const bottom = top + rail.clientHeight
+  canScrollUp.value = top > EDGE_SLACK
+  canScrollDown.value = bottom < rail.scrollHeight - EDGE_SLACK
+  const buttons = [...rail.querySelectorAll<HTMLElement>('.rail-btn')]
+  hiddenAbove.value = canScrollUp.value
+    ? buttons.filter(b => b.offsetTop < top + ARROW_COVER).length
+    : 0
+  hiddenBelow.value = canScrollDown.value
+    ? buttons.filter(b => b.offsetTop + b.offsetHeight > bottom - ARROW_COVER).length
+    : 0
+}
+
+function scrollRail(direction: 1 | -1) {
+  const rail = railRef.value
+  const step = rail?.querySelector<HTMLElement>('.rail-btn')?.offsetHeight ?? 60
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  rail?.scrollBy({ top: direction * (step + 6), behavior: reduce ? 'auto' : 'smooth' })
+  audio.chirp()
+}
+
+let railObserver: ResizeObserver | undefined
+
+onMounted(() => {
+  const rail = railRef.value
+  if (!rail) {
+    return
+  }
+  // The rail's slot changes with the window and with rotation, so watch it rather than
+  // the window alone.
+  railObserver = new ResizeObserver(updateRailOverflow)
+  railObserver.observe(rail)
+  updateRailOverflow()
+  // The webfont can arrive after mount and change button heights without resizing the
+  // rail's own box, which the observer would miss.
+  void document.fonts.ready.then(updateRailOverflow)
+})
+
+onBeforeUnmount(() => railObserver?.disconnect())
+
+function selectFilter(id: View) {
   filter.value = id
   audio.chirp()
 }
@@ -102,70 +170,121 @@ function toggleRedAlert() {
       </div>
     </header>
 
-    <nav
-      class="rail"
-      aria-label="Departments"
-    >
-      <button
-        type="button"
-        class="rail-btn"
-        :class="{ active: filter === 'all' }"
-        :aria-pressed="filter === 'all'"
-        style="--c: var(--lc-violet)"
-        @click="selectFilter('all')"
+    <div class="rail-wrap">
+      <nav
+        id="lcars-rail"
+        ref="railRef"
+        class="rail"
+        :class="{ 'fade-top': canScrollUp, 'fade-bottom': canScrollDown }"
+        aria-label="Departments"
+        @scroll.passive="updateRailOverflow"
       >
-        <small>00-0000</small>
-        <span class="long">All</span>
-        <span class="short">All</span>
-      </button>
-      <button
-        v-for="dept in DEPARTMENTS"
-        :key="dept.id"
-        type="button"
-        class="rail-btn"
-        :class="{ active: filter === dept.id }"
-        :aria-pressed="filter === dept.id"
-        :style="{ '--c': dept.color }"
-        @click="selectFilter(dept.id)"
-      >
-        <small>{{ dept.code }}</small>
-        <span class="long">{{ dept.label }}</span>
-        <span class="short">{{ dept.short }}</span>
-      </button>
-      <span
-        class="rail-fill"
-        aria-hidden="true"
-      ></span>
-      <button
-        type="button"
-        class="rail-btn alert-btn"
-        :aria-pressed="redAlert"
-        style="--c: var(--lc-red)"
-        @click="toggleRedAlert"
-      >
-        <small>99-0001</small>
-        <span class="long">Red Alert</span>
-        <span class="short">Alert</span>
-      </button>
-      <button
-        type="button"
-        class="rail-btn"
-        :aria-pressed="audio.enabled.value"
-        style="--c: var(--lc-blue)"
-        @click="audio.toggle"
-      >
-        <small>98-4410</small>
-        <span class="long">Audio {{ audio.enabled.value ? 'On' : 'Off' }}</span>
-        <span class="short">{{ audio.enabled.value ? 'Snd' : 'Mute' }}</span>
-      </button>
-    </nav>
+        <button
+          type="button"
+          class="rail-btn"
+          :class="{ active: filter === 'all' }"
+          :aria-pressed="filter === 'all'"
+          style="--c: var(--lc-violet)"
+          @click="selectFilter('all')"
+        >
+          <small>00-0000</small>
+          <span class="long">All</span>
+          <span class="short">All</span>
+        </button>
+        <button
+          v-for="dept in DEPARTMENTS"
+          :key="dept.id"
+          type="button"
+          class="rail-btn"
+          :class="{ active: filter === dept.id }"
+          :aria-pressed="filter === dept.id"
+          :style="{ '--c': dept.color }"
+          @click="selectFilter(dept.id)"
+        >
+          <small>{{ dept.code }}</small>
+          <span class="long">{{ dept.label }}</span>
+          <span class="short">{{ dept.short }}</span>
+        </button>
+        <button
+          type="button"
+          class="rail-btn"
+          :class="{ active: filter === 'markets' }"
+          :aria-pressed="filter === 'markets'"
+          style="--c: var(--lc-rose)"
+          @click="selectFilter('markets')"
+        >
+          <small>07-4211</small>
+          <span class="long">Markets</span>
+          <span class="short">MKT</span>
+        </button>
+        <span
+          class="rail-fill"
+          aria-hidden="true"
+        ></span>
+        <button
+          type="button"
+          class="rail-btn alert-btn"
+          :aria-pressed="redAlert"
+          style="--c: var(--lc-red)"
+          @click="toggleRedAlert"
+        >
+          <small>99-0001</small>
+          <span class="long">Red Alert</span>
+          <span class="short">Alert</span>
+        </button>
+        <button
+          type="button"
+          class="rail-btn"
+          :aria-pressed="audio.enabled.value"
+          style="--c: var(--lc-blue)"
+          @click="audio.toggle"
+        >
+          <small>98-4410</small>
+          <span class="long">Audio {{ audio.enabled.value ? 'On' : 'Off' }}</span>
+          <span class="short">{{ audio.enabled.value ? 'Snd' : 'Mute' }}</span>
+        </button>
+      </nav>
+      <transition name="rail-arrow">
+        <button
+          v-if="canScrollUp"
+          type="button"
+          class="rail-arrow rail-arrow-up"
+          aria-controls="lcars-rail"
+          :aria-label="`Scroll departments up, ${hiddenAbove} more`"
+          @click="scrollRail(-1)"
+        >
+          <span aria-hidden="true">&#9650;</span>
+          <span class="arrow-count">{{ hiddenAbove }}<span class="arrow-word"> more</span></span>
+        </button>
+      </transition>
+      <transition name="rail-arrow">
+        <button
+          v-if="canScrollDown"
+          type="button"
+          class="rail-arrow rail-arrow-down"
+          aria-controls="lcars-rail"
+          :aria-label="`Scroll departments down, ${hiddenBelow} more`"
+          @click="scrollRail(1)"
+        >
+          <span aria-hidden="true">&#9660;</span>
+          <span class="arrow-count">{{ hiddenBelow }}<span class="arrow-word"> more</span></span>
+        </button>
+      </transition>
+    </div>
 
     <div class="content">
       <p class="content-head">
         <span>{{ filterLabel }}</span>
-        <span class="count">{{ visibleRibbons.length }} systems</span>
+        <span
+          v-if="filter !== 'markets'"
+          class="count"
+        >{{ visibleRibbons.length }} systems</span>
       </p>
-      <ul class="ribbons">
+      <markets-panel v-if="filter === 'markets'" />
+      <ul
+        v-else
+        class="ribbons"
+      >
         <lcars-ribbon
           v-for="ribbon in visibleRibbons"
           :key="ribbon.id"
@@ -350,15 +469,117 @@ function toggleRedAlert() {
 }
 
 /* --- rail ------------------------------------------------------------------- */
-.rail {
+.rail-wrap {
+  position: relative;
   grid-column: 1;
   grid-row: 2;
+  display: flex;
+  min-height: 0;
+}
+
+.rail {
+  --fade-top: 0px;
+  --fade-bottom: 0px;
+
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 6px;
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: none;
+  /* The end with more beyond it dissolves into the black, reaching past the arrow pill
+     that sits over it so the fade stays visible. */
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--fade-top),
+    #000 calc(100% - var(--fade-bottom)),
+    transparent 100%
+  );
+}
+
+.rail::-webkit-scrollbar {
+  display: none;
+}
+
+.rail.fade-top {
+  --fade-top: 96px;
+}
+
+.rail.fade-bottom {
+  --fade-bottom: 96px;
+}
+
+/* --- rail arrows ---------------------------------------------------------------
+   Rounded where the rail buttons are square, and in a dark shade of the frame colour,
+   so they read as controls for the rail rather than more departments. */
+.rail-arrow {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  border-radius: 18px;
+  /* A shade of the frame colour, so it follows red alert; dark enough to need light text. */
+  background: color-mix(in srgb, var(--frame), black 45%);
+  color: var(--lc-peach);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 0 0 0 4px var(--lc-black);
+  transition:
+    background 300ms,
+    filter 150ms;
+}
+
+/* The pill is drawn shorter than a comfortable touch target, so an invisible margin
+   extends what a finger can hit back out to --tap. */
+.rail-arrow::before {
+  content: '';
+  position: absolute;
+  inset: calc((36px - var(--tap)) / 2) 0;
+}
+
+.rail-arrow:active {
+  filter: brightness(1.3);
+}
+
+/* Square on the edge that meets the end of the rail, rounded toward the buttons. */
+.rail-arrow-up {
+  top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.rail-arrow-down {
+  bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.rail-arrow-enter-active,
+.rail-arrow-leave-active {
+  transition:
+    opacity 180ms,
+    transform 180ms;
+}
+
+.rail-arrow-up.rail-arrow-enter-from,
+.rail-arrow-up.rail-arrow-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.rail-arrow-down.rail-arrow-enter-from,
+.rail-arrow-down.rail-arrow-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
 }
 
 .rail-btn {
@@ -369,11 +590,14 @@ function toggleRedAlert() {
   flex: 0 0 auto;
   min-height: 60px;
   padding: 4px 10px 6px;
+  /* Full-strength department colours, the same ones the ribbons use. */
   background: var(--c);
   color: var(--lc-black);
-  filter: brightness(0.72) saturate(0.85);
   text-transform: uppercase;
-  transition: filter 150ms;
+  transition:
+    filter 150ms,
+    background 150ms,
+    box-shadow 150ms;
 }
 
 .rail-btn small {
@@ -394,9 +618,12 @@ function toggleRedAlert() {
   display: none;
 }
 
+/* Selected or switched on: a lighter tint of its colour and a black notch at the left
+   edge, since every button is already at full brightness. */
 .rail-btn.active,
 .rail-btn[aria-pressed='true'] {
-  filter: none;
+  background: color-mix(in srgb, var(--c), white 35%);
+  box-shadow: inset 12px 0 0 var(--lc-black);
 }
 
 .rail-btn:active {
@@ -520,6 +747,10 @@ function toggleRedAlert() {
 
   .rail-btn small {
     font-size: 0.62rem;
+  }
+
+  .arrow-word {
+    display: none;
   }
 
   .readouts {

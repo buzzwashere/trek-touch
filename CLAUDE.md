@@ -16,8 +16,22 @@ shapes, so everything is plain scoped CSS over the tokens in `src/assets/main.cs
   `NotFound.vue` is the catch-all.
 - `src/components/LcarsRibbon.vue`: one status ribbon (tap to expand, swipe right to acknowledge).
 - `src/data/ribbons.ts`: departments and faux ribbon content.
-- `src/composables/`: `useLcarsAudio` (Web Audio chirps, created on first tap) and
-  `useStardate`.
+- `src/composables/`: `useLcarsAudio` (Web Audio chirps, created on first tap),
+  `useStardate`, and `useMarkets` (fetch + 2-minute refresh while visible).
+- `src/components/MarketsPanel.vue`: the Markets view, shown in the content column when
+  the rail's Markets button is selected.
+
+## Markets API
+
+- `api/_markets-core.ts`: server-side fetching of Finnhub quotes (ETFs) and US Treasury
+  yields (keyless CSV), normalised to `src/types/markets.ts` and cached for 60s. Provider
+  failures become `notices`, never a thrown error, so partial data still renders.
+- `api/markets.ts`: the Vercel function (`export function GET`). The leading `_` keeps the
+  core from becoming a route.
+- `vite.config.ts` has a dev-only middleware serving `/api/markets` from the same core via
+  `ssrLoadModule`, with the key from `loadEnv`.
+- `FINNHUB_API_KEY` lives in `.env.local` (git-ignored) or Vercel env vars, never
+  `VITE_*`, so it stays out of the client bundle.
 
 ## Touch conventions
 
