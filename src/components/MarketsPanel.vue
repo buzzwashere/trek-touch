@@ -147,7 +147,7 @@ const ARROWS = { up: '▲', down: '▼', flat: '■' }
             class="region-cap"
             aria-hidden="true"
           ></span>
-          {{ region.label }}
+          <span class="region-label">{{ region.label }}</span>
         </h2>
 
         <div
@@ -294,11 +294,19 @@ const ARROWS = { up: '▲', down: '▼', flat: '■' }
   text-transform: uppercase;
 }
 
+/* The pill and the capitals are the same height and centred on each other: the label's
+   box is trimmed to cap-top/baseline, and the pill is one cap height (Antonio: 0.86em)
+   tall. Without the trim, descender space below the capitals nudges them off-centre. */
 .region-cap {
-  width: 28px;
-  height: 22px;
-  border-radius: 11px 0 0 11px;
+  flex: 0 0 28px;
+  height: 0.86em;
+  border-radius: 0.43em 0 0 0.43em;
   background: var(--lc-orange);
+}
+
+.region-label {
+  line-height: 1;
+  text-box: trim-both cap alphabetic;
 }
 
 .section-title {

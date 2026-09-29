@@ -34,6 +34,10 @@ const filterLabel = computed(() => {
   return DEPARTMENTS.find(d => d.id === filter.value)!.label
 })
 
+// The top-bar title follows the rail: the chosen department or Markets, and the
+// console's own name when everything is shown.
+const titleText = computed(() => (filter.value === 'all' ? 'Test Trek' : filterLabel.value))
+
 const ackCount = computed(() => RIBBONS.filter(r => acknowledged.value[r.id]).length)
 
 const stardateText = computed(() => stardate.value.toFixed(1))
@@ -147,7 +151,17 @@ function toggleRedAlert() {
     <header class="top">
       <div class="top-bar">
         <span class="bar-fill"></span>
-        <h1 class="title">Test Trek</h1>
+        <h1 class="title">
+          <transition
+            name="title-swap"
+            mode="out-in"
+          >
+            <span
+              :key="titleText"
+              class="title-text"
+            >{{ titleText }}</span>
+          </transition>
+        </h1>
         <span class="bar-seg seg-1"></span>
         <span class="bar-seg seg-2"></span>
       </div>
@@ -406,17 +420,50 @@ function toggleRedAlert() {
   transition: background 300ms;
 }
 
+/* Capitals exactly as tall as the bar beside them: Antonio's cap height is 0.86em, and
+   text-box trims the line box to cap-top/baseline so the letters sit flush with the
+   bar's top and bottom edges. */
 .title {
+  --cap-ratio: 0.86;
+
   margin: 0;
   padding: 0 4px;
   color: var(--frame-2);
-  font-size: clamp(1.9rem, 6vw, 3rem);
+  font-size: calc(var(--bar) / var(--cap-ratio));
   font-weight: 700;
   letter-spacing: 0.05em;
-  line-height: 0.8;
+  line-height: 1;
+  text-box: trim-both cap alphabetic;
   text-transform: uppercase;
   white-space: nowrap;
   transition: color 300ms;
+  /* Longer department names must not push the bar segments off the edge. */
+  min-width: 0;
+  overflow: hidden;
+}
+
+.title-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A quick drop-in when the title changes, like a panel relabelling itself. */
+.title-swap-enter-active,
+.title-swap-leave-active {
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.title-swap-enter-from {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.title-swap-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
 }
 
 .bar-seg {
