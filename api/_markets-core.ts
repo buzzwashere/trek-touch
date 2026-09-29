@@ -9,7 +9,9 @@
 //   US-listed ETF: SPY for the S&P 500, VGK for Europe, BNDX for international bonds.
 // - US Treasury daily par yield curve (no key) for Treasury yields.
 
-import type { MarketRow, MarketSection, MarketsSnapshot } from '../src/types/markets'
+// Relative imports carry `.js`: Vercel runs these functions as native ESM, which needs
+// the extension. TypeScript maps it to the .ts source.
+import type { MarketRow, MarketSection, MarketsSnapshot } from '../src/types/markets.js'
 
 interface Instrument {
   symbol: string

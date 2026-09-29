@@ -28,6 +28,10 @@ shapes, so everything is plain scoped CSS over the tokens in `src/assets/main.cs
   failures become `notices`, never a thrown error, so partial data still renders.
 - `api/markets.ts`: the Vercel function (`export function GET`). The leading `_` keeps the
   core from becoming a route.
+- Relative imports under `api/` must end in `.js` (e.g. `'./_markets-core.js'`). The
+  package is `"type": "module"`, so Vercel runs the compiled functions as native ESM,
+  which fails on extensionless imports with `ERR_MODULE_NOT_FOUND`. Vite and `vue-tsc`
+  don't catch this.
 - `vite.config.ts` has a dev-only middleware serving `/api/markets` from the same core via
   `ssrLoadModule`, with the key from `loadEnv`.
 - `FINNHUB_API_KEY` lives in `.env.local` (git-ignored) or Vercel env vars, never
